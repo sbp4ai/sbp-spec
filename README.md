@@ -1,4 +1,153 @@
-# SBP · Session Bridge Protocol — 规范仓库
+# SBP · Session Bridge Protocol — Specification Repository
+
+> Let an "IM web page / mini-program" take over the Agent session running on your computer
+> (claude-code / codex / dsh / hermes / openclaw / workbuddy / qwen-office).
+> Spec first, then implementation. This repository holds **only the protocol specification** — no runtime code.
+
+## Repository Split
+
+SBP is split into 6 independent repositories. This one is the "contract" that every other repository depends on:
+
+| Repo | Role | Notes |
+|---|---|---|
+| [sbp-spec](https://github.com/sbp4ai/sbp-spec) | Protocol spec (this repo) | roles / frames / message tables / lazy-loading / security / evolution + agent adapter mapping |
+| [sbp-server](https://github.com/sbp4ai/sbp-server) | Public relay | auth, device-code binding, routing, JSONL persistence, reverse paging, seq allocation; pulls in sbp-sdk via submodule |
+| [sbp-sdk](https://github.com/sbp4ai/sbp-sdk) | Web client library | single-file `sbp-sdk.js`, served by sbp-server as a static file for the IM card |
+| [sbp-agent](https://github.com/sbp4ai/sbp-agent) | Local daemon | runs on the machine running tmux+claude: panel (tmux-claude panel) + bridge (PC-side bridge) + demo |
+| [sbp-minis](https://github.com/sbp4ai/sbp-minis) | WeChat mini-program | drive sessions from a phone (REST polling default, WS optional) |
+| [sbp-im-embed](https://github.com/sbp4ai/sbp-im-embed) | IM-embed skill | a Skill that lets an agent lazy-load an SBP web page inside an IM |
+
+> Splitting principle: spec is the single contract (versioned); server and agent are the two runtime ends;
+> sdk is the shared web library (depended on by server, hence submodule instead of copy);
+> minis and im-embed are two different shapes of consumer.
+
+## Architecture & Inter-repo Call Graph
+
+```mermaid
+flowchart TB
+    classDef c_spec fill:#E8F0FE,stroke:#4285F4,stroke-width:2px,color:#10243f
+    classDef c_srv  fill:#FCE8E6,stroke:#EA4335,stroke-width:2px,color:#3a0d0a
+    classDef c_ag   fill:#E6F4EA,stroke:#34A853,stroke-width:2px,color:#0c2e18
+    classDef c_sdk  fill:#FEF7E0,stroke:#F9AB00,stroke-width:2px,color:#3a2c00
+    classDef c_mini fill:#F3E8FD,stroke:#A142F4,stroke-width:2px,color:#2e0a47
+    classDef c_emb  fill:#E0F7FA,stroke:#00ACC1,stroke-width:2px,color:#00363d
+    classDef c_note fill:#FFFFFF,stroke:#9AA0A6,stroke-width:1px,stroke-dasharray:4 4,color:#444
+
+    SPEC["<b>📜 sbp-spec</b><br/>protocol single source of truth<br/>SBP-0.1 base / SBP-0.2 interaction<br/>REST↔WS dual-mode · HMAC · error codes"]
+
+    subgraph SRV["🔧 sbp-server · public hub (public IP)"]
+        direction TB
+        SRV_H["WS Hub + JSONL Store<br/>seq allocation (line number = seq)"]
+        SRV_D["Device Binding<br/>bind code / HMAC"]
+        SRV_R["Router<br/>GET /api/index·state·history<br/>POST /api/rpc · /ws"]
+        SRV_S["serve /sbp-sdk.js<br/>(submodule → sdk/)"]
+        SRV_H --> SRV_R
+        SRV_D --> SRV_R
+        SRV_R --> SRV_S
+    end
+
+    subgraph SDK["📦 sbp-sdk · single-file client sbp-sdk.js"]
+        direction TB
+        SDK_T["dual-channel REST / WS<br/>HMAC signing (ts=ms)"]
+        SDK_L["lazy-load · reverse paging<br/>byte-offset index O(1)"]
+        SDK_T --> SDK_L
+    end
+
+    subgraph AG["🖥️ sbp-agent · PC side (no inbound port)"]
+        direction TB
+        AG_B["sbp-bridge<br/>pty/tmux source + adapter DSL"]
+        AG_A["active detection<br/>claude L0/L1/L2 · dsh process-level"]
+        AG_P["panel (tmux-claude-panel)<br/>FastAPI + no-build web UI<br/>reads ~/.claude/projects/*/*.jsonl"]
+        AG_B --> AG_A --> AG_P
+    end
+
+    subgraph MINI["📱 sbp-minis · WeChat mini-program"]
+        direction TB
+        M_S["pages/settings<br/>transport REST/WS selector"]
+        M_U["utils/sbp.js · hmac.js<br/>(hand-written, no WebCrypto)"]
+        M_H["application-level heartbeat ping"]
+        M_S --> M_U --> M_H
+    end
+
+    subgraph EMB["💬 sbp-im-embed · IM card lazy-load page"]
+        direction TB
+        E_C["Feishu / DingTalk card"]
+        E_L["lazy-loaded web page → /ws"]
+        E_C --> E_L
+    end
+
+    NOTE["<b>Core invariant</b>: the bridge only dials out (the PC never opens a port, no NAT traversal needed).<br/>All clients call the server API through sbp-sdk: GET /api/index·state·history, POST /api/rpc, /ws."]
+
+    SPEC -. "defines" .-> SRV
+    SPEC -. "defines" .-> SDK
+    SPEC -. "defines" .-> AG
+    SPEC -. "defines" .-> MINI
+    SPEC -. "defines" .-> EMB
+
+    SRV_S -. "submodule" .-> SDK
+
+    SDK -. "embeds/adapts" .-> AG_P
+    SDK -. "adapts" .-> M_U
+    SDK -. "embeds" .-> E_L
+
+    AG_B == "outbound WS reverse connection" ==> SRV_H
+    AG_P == "WS / REST" ==> SRV_R
+    M_H  == "wss / REST" ==> SRV_R
+    E_L  == "WS / REST" ==> SRV_R
+
+    SRV_H -. "fanout events" .-> AG_P
+    SRV_H -. "fanout events" .-> M_H
+    SRV_H -. "fanout events" .-> E_L
+
+    class SPEC c_spec
+    class SRV,SRV_H,SRV_D,SRV_R,SRV_S c_srv
+    class AG,AG_B,AG_A,AG_P c_ag
+    class SDK,SDK_T,SDK_L c_sdk
+    class MINI,M_S,M_U,M_H c_mini
+    class EMB,E_C,E_L c_emb
+    class NOTE c_note
+```
+
+> Edge legend: **dashed "defines"** = sbp-spec is the protocol authority; **dashed "submodule"** = sbp-server mounts sbp-sdk as a submodule;
+> **dashed "embeds/adapts"** = clients embed sbp-sdk; **solid bold "calls"** = runtime calls (bridge only dials out; others talk to server via WS/REST).
+> The full editable source is in [`architecture.mmd`](./architecture.mmd).
+
+## Protocol Versions
+
+The spec evolves as a **versioned contract**; implementations should pin to a version:
+
+- Current baseline: **SBP/0.2** (`SBP-0.1.md` roles/frames/lazy-loading + `SBP-0.2-interaction.md` option cards + `SBP-transport.md` transport choice)
+- Each implementation advertises its protocol version at handshake (e.g. `sbp-server`'s `VERSION = "sbp/0.1"`,
+  `sbp-sdk`'s `V = "sbp/0.1"`, `sbp-agent` panel's `version="0.1.0"`); on cross-repo drift, degrade or error accordingly
+- This repo carries a lightweight tag `sbp/0.2` marking the current baseline; `git checkout sbp/0.2` locks the contract
+
+> Implementations currently still lean toward `sbp/0.1` (handshake sub-protocol `sbp.v0.1`); before moving to 0.2, align on the
+> `session.prompt/answer` frames in `SBP-0.2-interaction.md` first.
+
+## Why CS, not P2P
+
+The controlled computer **only ever dials out** to the server. No open ports, no NAT traversal, no same-LAN requirement.
+
+## Directory
+
+```
+spec/
+  SBP-0.1.md              protocol body (roles / frames / message tables / lazy-loading / security / evolution)
+  SBP-0.2-interaction.md  interaction prompts: session.prompt / session.answer, option cards, 3-level degradation
+  SBP-transport.md        transport choice: WebSocket push vs HTTP polling+ETag vs MQTT
+  schema/*.json           JSON Schema for envelope and session index
+  adapters/*.yaml         formal mapping for 8 agents (declarative only, no scripts)
+```
+
+## Default Transport
+
+**REST polling + ETag is the primary transport**; WebSocket is an optional upgrade (see `SBP-transport.md`).
+Rationale: under the trade-off "save server resources > real-time, and no WS long connection", a polling connection costs
+almost nothing after it closes, and an unchanged poll is just a 304 comparison; WS must hold a socket and push on every change.
+
+---
+
+# SBP · Session Bridge Protocol — 规范仓库（中文）
 
 > 让「IM 里的一个网页 / 小程序」接管「你电脑上正在跑的 Agent 会话」
 > （claude-code / codex / dsh / hermes / openclaw / workbuddy / qwen-office）。
@@ -22,95 +171,10 @@ SBP 拆成 6 个独立仓库，本仓库是「协议契约」，其余都依赖�
 
 ## 架构与仓库调用关系
 
-```mermaid
-flowchart TB
-    classDef c_spec fill:#E8F0FE,stroke:#4285F4,stroke-width:2px,color:#10243f
-    classDef c_srv  fill:#FCE8E6,stroke:#EA4335,stroke-width:2px,color:#3a0d0a
-    classDef c_ag   fill:#E6F4EA,stroke:#34A853,stroke-width:2px,color:#0c2e18
-    classDef c_sdk  fill:#FEF7E0,stroke:#F9AB00,stroke-width:2px,color:#3a2c00
-    classDef c_mini fill:#F3E8FD,stroke:#A142F4,stroke-width:2px,color:#2e0a47
-    classDef c_emb  fill:#E0F7FA,stroke:#00ACC1,stroke-width:2px,color:#00363d
-    classDef c_note fill:#FFFFFF,stroke:#9AA0A6,stroke-width:1px,stroke-dasharray:4 4,color:#444
+（架构图见上方英文区的 mermaid，或独立的 [`architecture.mmd`](./architecture.mmd)。）
 
-    SPEC["<b>📜 sbp-spec</b><br/>协议单一事实来源<br/>SBP-0.1 基础 / SBP-0.2 交互<br/>REST↔WS 双模 · HMAC · 错误码"]
-
-    subgraph SRV["🔧 sbp-server · 公共枢纽 (公网 IP)"]
-        direction TB
-        SRV_H["WS Hub + JSONL Store<br/>seq 分配 (行号即 seq)"]
-        SRV_D["Device Binding<br/>bind code / HMAC"]
-        SRV_R["Router<br/>GET /api/index·state·history<br/>POST /api/rpc · /ws"]
-        SRV_S["serve /sbp-sdk.js<br/>(submodule → sdk/)"]
-        SRV_H --> SRV_R
-        SRV_D --> SRV_R
-        SRV_R --> SRV_S
-    end
-
-    subgraph SDK["📦 sbp-sdk · 单文件客户端 sbp-sdk.js"]
-        direction TB
-        SDK_T["双通道 REST / WS<br/>HMAC 签名 (ts=毫秒)"]
-        SDK_L["懒加载 · 倒序分页<br/>字节偏移索引 O(1)"]
-        SDK_T --> SDK_L
-    end
-
-    subgraph AG["🖥️ sbp-agent · PC 侧 (无入站端口)"]
-        direction TB
-        AG_B["sbp-bridge<br/>pty/tmux source + adapter DSL"]
-        AG_A["active 判定<br/>claude L0/L1/L2 · dsh 进程级"]
-        AG_P["panel (tmux-claude-panel)<br/>FastAPI + 无构建 Web UI<br/>读 ~/.claude/projects/*/*.jsonl"]
-        AG_B --> AG_A --> AG_P
-    end
-
-    subgraph MINI["📱 sbp-minis · 微信小程序"]
-        direction TB
-        M_S["pages/settings<br/>传输方式 REST/WS 选择"]
-        M_U["utils/sbp.js · hmac.js<br/>(手写, 无 WebCrypto)"]
-        M_H["应用层心跳 ping"]
-        M_S --> M_U --> M_H
-    end
-
-    subgraph EMB["💬 sbp-im-embed · IM 卡片懒加载页"]
-        direction TB
-        E_C["飞书 / 钉钉 卡片"]
-        E_L["懒加载 web 页 → /ws"]
-        E_C --> E_L
-    end
-
-    NOTE["<b>核心不变量</b>: bridge 只拨出 (PC 永不开放端口, 无需 NAT 穿透).<br/>所有客户端经 sbp-sdk 调 server API: GET /api/index·state·history, POST /api/rpc, /ws."]
-
-    %% 依赖关系
-    SPEC -. "定义" .-> SRV
-    SPEC -. "定义" .-> SDK
-    SPEC -. "定义" .-> AG
-    SPEC -. "定义" .-> MINI
-    SPEC -. "定义" .-> EMB
-
-    SRV_S -. "submodule" .-> SDK
-
-    SDK -. "嵌入/适配" .-> AG_P
-    SDK -. "适配" .-> M_U
-    SDK -. "嵌入" .-> E_L
-
-    AG_B == "outbound WS 反向连接" ==> SRV_H
-    AG_P == "WS / REST" ==> SRV_R
-    M_H  == "wss / REST" ==> SRV_R
-    E_L  == "WS / REST" ==> SRV_R
-
-    SRV_H -. "fanout 事件" .-> AG_P
-    SRV_H -. "fanout 事件" .-> M_H
-    SRV_H -. "fanout 事件" .-> E_L
-
-    class SPEC c_spec
-    class SRV,SRV_H,SRV_D,SRV_R,SRV_S c_srv
-    class AG,AG_B,AG_A,AG_P c_ag
-    class SDK,SDK_T,SDK_L c_sdk
-    class MINI,M_S,M_U,M_H c_mini
-    class EMB,E_C,E_L c_emb
-    class NOTE c_note
-```
-
-> 边样式速读：**虚线「定义」** = sbp-spec 是协议权威；**虚线「submodule」** = sbp-server 以 submodule 挂载 sbp-sdk；
-> **虚线「嵌入/适配」** = 客户端内嵌 sbp-sdk；**实线粗箭头「调用」** = 运行时调用（bridge 仅出站反向连接，其余经 WS/REST 调 server）。
-> 完整可编辑源见 [`architecture.mmd`](./architecture.mmd)。
+边样式速读：**虚线「定义」** = sbp-spec 是协议权威；**虚线「submodule」** = sbp-server 以 submodule 挂载 sbp-sdk；
+**虚线「嵌入/适配」** = 客户端内嵌 sbp-sdk；**实线粗箭头「调用」** = 运行时调用（bridge 仅出站反向连接，其余经 WS/REST 调 server）。
 
 ## 协议版本
 

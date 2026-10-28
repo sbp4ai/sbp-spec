@@ -20,6 +20,98 @@ SBP 拆成 6 个独立仓库，本仓库是「协议契约」，其余都依赖�
 > 划分原则：spec 是唯一契约（版本化）；server 与 agent 是两端的运行时；sdk 是共享网页库
 > （被 server 依赖，故以 submodule 引入而非复制）；minis 与 im-embed 是两种不同形态的消费端。
 
+## 架构与仓库调用关系
+
+```mermaid
+flowchart TB
+    classDef c_spec fill:#E8F0FE,stroke:#4285F4,stroke-width:2px,color:#10243f
+    classDef c_srv  fill:#FCE8E6,stroke:#EA4335,stroke-width:2px,color:#3a0d0a
+    classDef c_ag   fill:#E6F4EA,stroke:#34A853,stroke-width:2px,color:#0c2e18
+    classDef c_sdk  fill:#FEF7E0,stroke:#F9AB00,stroke-width:2px,color:#3a2c00
+    classDef c_mini fill:#F3E8FD,stroke:#A142F4,stroke-width:2px,color:#2e0a47
+    classDef c_emb  fill:#E0F7FA,stroke:#00ACC1,stroke-width:2px,color:#00363d
+    classDef c_note fill:#FFFFFF,stroke:#9AA0A6,stroke-width:1px,stroke-dasharray:4 4,color:#444
+
+    SPEC["<b>📜 sbp-spec</b><br/>协议单一事实来源<br/>SBP-0.1 基础 / SBP-0.2 交互<br/>REST↔WS 双模 · HMAC · 错误码"]
+
+    subgraph SRV["🔧 sbp-server · 公共枢纽 (公网 IP)"]
+        direction TB
+        SRV_H["WS Hub + JSONL Store<br/>seq 分配 (行号即 seq)"]
+        SRV_D["Device Binding<br/>bind code / HMAC"]
+        SRV_R["Router<br/>GET /api/index·state·history<br/>POST /api/rpc · /ws"]
+        SRV_S["serve /sbp-sdk.js<br/>(submodule → sdk/)"]
+        SRV_H --> SRV_R
+        SRV_D --> SRV_R
+        SRV_R --> SRV_S
+    end
+
+    subgraph SDK["📦 sbp-sdk · 单文件客户端 sbp-sdk.js"]
+        direction TB
+        SDK_T["双通道 REST / WS<br/>HMAC 签名 (ts=毫秒)"]
+        SDK_L["懒加载 · 倒序分页<br/>字节偏移索引 O(1)"]
+        SDK_T --> SDK_L
+    end
+
+    subgraph AG["🖥️ sbp-agent · PC 侧 (无入站端口)"]
+        direction TB
+        AG_B["sbp-bridge<br/>pty/tmux source + adapter DSL"]
+        AG_A["active 判定<br/>claude L0/L1/L2 · dsh 进程级"]
+        AG_P["panel (tmux-claude-panel)<br/>FastAPI + 无构建 Web UI<br/>读 ~/.claude/projects/*/*.jsonl"]
+        AG_B --> AG_A --> AG_P
+    end
+
+    subgraph MINI["📱 sbp-minis · 微信小程序"]
+        direction TB
+        M_S["pages/settings<br/>传输方式 REST/WS 选择"]
+        M_U["utils/sbp.js · hmac.js<br/>(手写, 无 WebCrypto)"]
+        M_H["应用层心跳 ping"]
+        M_S --> M_U --> M_H
+    end
+
+    subgraph EMB["💬 sbp-im-embed · IM 卡片懒加载页"]
+        direction TB
+        E_C["飞书 / 钉钉 卡片"]
+        E_L["懒加载 web 页 → /ws"]
+        E_C --> E_L
+    end
+
+    NOTE["<b>核心不变量</b>: bridge 只拨出 (PC 永不开放端口, 无需 NAT 穿透).<br/>所有客户端经 sbp-sdk 调 server API: GET /api/index·state·history, POST /api/rpc, /ws."]
+
+    %% 依赖关系
+    SPEC -. "定义" .-> SRV
+    SPEC -. "定义" .-> SDK
+    SPEC -. "定义" .-> AG
+    SPEC -. "定义" .-> MINI
+    SPEC -. "定义" .-> EMB
+
+    SRV_S -. "submodule" .-> SDK
+
+    SDK -. "嵌入/适配" .-> AG_P
+    SDK -. "适配" .-> M_U
+    SDK -. "嵌入" .-> E_L
+
+    AG_B == "outbound WS 反向连接" ==> SRV_H
+    AG_P == "WS / REST" ==> SRV_R
+    M_H  == "wss / REST" ==> SRV_R
+    E_L  == "WS / REST" ==> SRV_R
+
+    SRV_H -. "fanout 事件" .-> AG_P
+    SRV_H -. "fanout 事件" .-> M_H
+    SRV_H -. "fanout 事件" .-> E_L
+
+    class SPEC c_spec
+    class SRV,SRV_H,SRV_D,SRV_R,SRV_S c_srv
+    class AG,AG_B,AG_A,AG_P c_ag
+    class SDK,SDK_T,SDK_L c_sdk
+    class MINI,M_S,M_U,M_H c_mini
+    class EMB,E_C,E_L c_emb
+    class NOTE c_note
+```
+
+> 边样式速读：**虚线「定义」** = sbp-spec 是协议权威；**虚线「submodule」** = sbp-server 以 submodule 挂载 sbp-sdk；
+> **虚线「嵌入/适配」** = 客户端内嵌 sbp-sdk；**实线粗箭头「调用」** = 运行时调用（bridge 仅出站反向连接，其余经 WS/REST 调 server）。
+> 完整可编辑源见 [`architecture.mmd`](./architecture.mmd)。
+
 ## 协议版本
 
 规范按**版本化契约**演进，实现方应固定到某个版本：

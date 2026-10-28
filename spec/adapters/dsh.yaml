@@ -1,0 +1,42 @@
+adapter: dsh@2
+agent: dsh
+display: DSH Agent
+match:
+  cmd: ["dsh", "dsh-agent"]
+  version: ">=2.0 <3"
+
+# dsh 是纯 pty 型：没有结构化接口，全靠屏读。
+transport:
+  type: pty
+  shell: ["dsh", "--no-banner"]
+  capture: {mode: screen, rows: 40, cols: 100, interval_ms: 400}
+  env: {TERM: "xterm-256color", NO_COLOR: "1"}
+
+state:
+  busy:    {regex: "◐|◓|working|executing"}
+  idle:    {regex: "^\\s*$"}
+  waiting: {regex: "\\[y/N\\]|continue\\?|\\(yes/no\\)"}
+
+parse:
+  # 从屏幕提取选项：形如 " 1) 继续   2) 放弃"
+  choice:
+    regex: "^\\s*(\\d+)\\)\\s+(.+?)\\s*$"
+    group_index: 1
+    group_label: 2
+  # 从屏幕提取当前任务标题（首屏第 1 行有 "task: xxx"）
+  title: {regex: "^task:\\s*(.+)$", group: 1}
+  prompt: {regex: "^❯\\s*$"}
+
+semantics:
+  input.text:      {write: "{{text}}", submit: "\r"}
+  input.key:       {keys: {"UP": "\u001b[A", "DOWN": "\u001b[B", "ENTER": "\r", "ESC": "\u001b"}}
+  input.choice:    {write: "{{index}}", submit: "\r"}
+  input.approve:   {write: "{{yes_no}}", submit: "\r", "yes": "y", "no": "n"}
+  input.interrupt: {write: "\u0003"}
+  session.snapshot: {resend: "screen_buffer"}
+
+guards:
+  confirm_regex: "(rm -rf|shutdown|deploy --prod)"
+
+caps: [input.text, input.key, input.choice, input.approve, input.interrupt, output.screen, screen.snapshot]
+# 注意：dsh 会话为单例，不提供 session.list / session.spawn —— sdk 会自动隐藏「+ 新会话」按钮。

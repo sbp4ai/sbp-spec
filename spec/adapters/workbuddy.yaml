@@ -1,0 +1,37 @@
+adapter: workbuddy@1
+agent: workbuddy
+display: WorkBuddy
+match:
+  cmd: ["workbuddy", "wb"]
+  detect: {env: "WORKBUDDY_HOME"}
+
+# WorkBuddy 会话本身是「任务-回合」模型，用 http 对接它的本地 daemon。
+transport:
+  type: http
+  base: "http://127.0.0.1:7777"
+  auth: {type: bearer, env: WORKBUDDY_TOKEN}
+  endpoints:
+    list:    {method: GET,  path: "/api/sessions"}
+    history: {method: GET,  path: "/api/sessions/{{sid}}/messages", query: {before: "{{before_seq}}", limit: "{{limit}}"}}
+    send:    {method: POST, path: "/api/sessions/{{sid}}/message", body: {text: "{{text}}"}}
+    stop:    {method: POST, path: "/api/sessions/{{sid}}/cancel"}
+  async:
+    transport: ws
+    path: "/api/sessions/{{sid}}/stream"
+
+parse:
+  map:
+    message: {seq: "seq", role: "author", kind: "kind", text: "body", ts: "at"}
+
+state:
+  busy:    {json: {field: "phase", in: ["planning", "executing"]}}
+  idle:    {json: {field: "phase", equals: "done"}}
+  waiting: {json: {field: "phase", equals: "need_approval"}}
+
+semantics:
+  input.text:      {write: "{{text}}"}
+  input.choice:    {write: "{{label}}"}
+  input.approve:   {write: "{{yes_no}}"}
+  input.interrupt: {stop: true}
+
+caps: [session.list, session.spawn, input.text, input.choice, input.approve, input.interrupt, output.stream]

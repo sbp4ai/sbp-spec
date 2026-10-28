@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sbp.dev/schema/0.1/session.json",
+  "title": "SBP Session Index Entry v0.1",
+  "type": "object",
+  "required": ["sid", "title", "agent", "status", "updated_at", "last_seq"],
+  "additionalProperties": false,
+  "properties": {
+    "sid": { "type": "string", "pattern": "^s_[A-Za-z0-9]{4,32}$" },
+    "title": { "type": "string", "maxLength": 120 },
+    "agent": { "type": "string" },
+    "adapter": { "type": "string" },
+    "status": { "enum": ["running", "idle", "waiting_input", "exited"] },
+    "updated_at": { "type": "integer" },
+    "last_seq": { "type": "integer", "minimum": 0 },
+    "msg_count": { "type": "integer", "minimum": 0 },
+    "caps": { "type": "array", "items": { "type": "string" } },
+    "preview": { "type": "string", "maxLength": 200 }
+  }
+}

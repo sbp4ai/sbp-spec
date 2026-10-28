@@ -1,0 +1,27 @@
+adapter: generic@0
+agent: generic
+display: Generic Terminal
+match: {}          # 兜底，永远最低分
+
+# 任何找不到适配器的程序都走这里：纯 pty + 全文透传 + 只能发文本。
+transport:
+  type: pty
+  shell: ["{{shell}}", "-i"]
+  capture: {mode: screen, rows: 40, cols: 100, interval_ms: 600}
+  env: {TERM: "xterm-256color"}
+
+state:
+  busy:    {regex: "(?!)"}          # 永不匹配
+  idle:    {regex: ".*"}
+  waiting: {regex: "(?!)"}
+
+parse: {}
+
+semantics:
+  input.text:      {write: "{{text}}", submit: "\r"}
+  input.key:       {keys: {"ENTER": "\r", "ESC": "\u001b"}}
+  input.choice:    {unsupported: true}
+  input.approve:   {unsupported: true}
+  input.interrupt: {write: "\u0003"}
+
+caps: [input.text, input.key, input.interrupt, output.screen]

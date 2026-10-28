@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sbp.dev/schema/0.1/envelope.json",
+  "title": "SBP Envelope v0.1",
+  "type": "object",
+  "required": ["v", "type", "name"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "type": "string", "const": "sbp/0.1" },
+    "id": { "type": "string", "maxLength": 64 },
+    "type": { "enum": ["req", "res", "evt"] },
+    "name": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*)+$" },
+    "ts": { "type": "integer", "minimum": 0 },
+    "ref": { "type": "string", "maxLength": 64 },
+    "sid": { "type": "string", "pattern": "^s_[A-Za-z0-9]{4,32}$" },
+    "seq": { "type": "integer", "minimum": 0 },
+    "cid": { "type": "string", "maxLength": 64 },
+    "ok": { "type": "boolean" },
+    "err": {
+      "type": "object",
+      "required": ["code", "msg"],
+      "properties": {
+        "code": {
+          "enum": [
+            "E_VERSION", "E_AUTH", "E_NO_DEVICE", "E_NO_SESSION",
+            "E_NOT_ALLOWED", "E_BACKPRESSURE", "E_RATE_LIMIT",
+            "E_UNKNOWN_NAME", "E_GAP", "E_INTERNAL"
+          ]
+        },
+        "msg": { "type": "string" },
+        "retryable": { "type": "boolean" }
+      }
+    },
+    "payload": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "req" } } },
+      "then": { "required": ["id"] }
+    },
+    {
+      "if": { "properties": { "type": { "const": "res" } } },
+      "then": { "required": ["ref", "ok"] }
+    },
+    {
+      "if": { "properties": { "name": { "const": "output.delta" } } },
+      "then": { "required": ["sid", "seq"] }
+    }
+  ]
+}

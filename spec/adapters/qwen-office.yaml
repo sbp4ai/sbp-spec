@@ -1,0 +1,39 @@
+adapter: qwen-office@1
+agent: qwen-office
+display: 千问办公
+match:
+  host: "*.qwen.ai|*.aliyun.com"
+  detect: {screen: "千问办公|Qwen Office"}
+
+# 千问办公是「云端会话 + 客户端投屏」：本 adapter 只接管客户端窗口，
+# 用 CDP (Chrome DevTools Protocol) 读 DOM，等价于把网页会话变成结构化流。
+transport:
+  type: cdp
+  endpoint: "http://127.0.0.1:9222"
+  target_matcher: {url_contains: "qwen"}
+  capture: {mode: dom, interval_ms: 800}
+
+parse:
+  selectors:
+    messages: "[data-role='message']"
+    role:     "[data-role]"
+    text:     ".markdown-body"
+    input:    "textarea[data-testid='chat-input']"
+    send_btn: "button[data-testid='send']"
+    choices:  "[data-testid='option-item']"
+  map:
+    message: {role_attr: "data-role", text: ".markdown-body"}
+
+state:
+  busy:    {selector: "[data-testid='stop-btn']", exists: true}
+  idle:    {selector: "[data-testid='send']", enabled: true}
+  waiting: {selector: "[data-testid='option-item']", exists: true}
+
+semantics:
+  input.text:      {fill: "{{text}}", then_click: "send_btn"}
+  input.choice:    {click_index: "{{index}}", target: "choices"}
+  input.approve:   {click_text: "{{yes_label}}"}
+  input.interrupt: {click: "[data-testid='stop-btn']"}
+  input.key:       {unsupported: true}
+
+caps: [session.list, input.text, input.choice, input.approve, input.interrupt, output.stream]

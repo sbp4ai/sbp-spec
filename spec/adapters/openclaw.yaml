@@ -1,0 +1,43 @@
+adapter: openclaw@1
+agent: openclaw
+display: OpenClaw (web pi agent)
+match:
+  host: "*.openclaw.local|openclaw.app"
+  key: OPENCLAW_API_KEY
+
+# openclaw 网页版 pi agent：原生 WS，直接把它的帧翻成 SBP。
+transport:
+  type: ws
+  url: "wss://{{host}}/pi/agent"
+  auth: {type: header, name: "x-api-key", env: OPENCLAW_API_KEY}
+  subprotocol: "pi.v1"
+  frame_map:
+    # pi → sbp
+    in:
+      - {match: {type: "token"},     to: "output.delta", payload: {data: "$.text", enc: "utf8", mode: "stream"}}
+      - {match: {type: "message"},   to: "output.delta", payload: {lines: ["$.text"], mode: "screen"}}
+      - {match: {type: "status"},    to: "session.state", payload: {status: "$.state"}}
+      - {match: {type: "tool_call"}, to: "output.delta", payload: {lines: ["⚙ $.name"], mode: "screen"}}
+    # sbp → pi
+    out:
+      - {from: "input.text",      to: {type: "prompt", text: "$.text"}}
+      - {from: "input.choice",    to: {type: "select", index: "$.index"}}
+      - {from: "input.approve",   to: {type: "confirm", value: "$.value"}}
+      - {from: "input.interrupt", to: {type: "abort"}}
+
+state:
+  busy:    {json: {field: "state", in: ["thinking", "streaming"]}}
+  idle:    {json: {field: "state", equals: "ready"}}
+  waiting: {json: {field: "state", equals: "needs_confirmation"}}
+
+parse:
+  choice_from_tool: {tool: "ask_user", field: "options"}
+
+semantics:
+  input.text:      {send: true}
+  input.key:       {unsupported: true}
+  input.choice:    {send: true}
+  input.approve:   {send: true}
+  input.interrupt: {send: true}
+
+caps: [session.list, input.text, input.choice, input.approve, input.interrupt, output.stream]

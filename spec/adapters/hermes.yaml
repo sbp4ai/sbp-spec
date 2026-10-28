@@ -1,0 +1,41 @@
+adapter: hermes@1
+agent: hermes
+display: Hermes Agent
+match:
+  cmd: ["hermes", "hermes-agent"]
+  version: ">=1.0"
+  detect: {http: "/healthz"}
+
+# hermes 走 HTTP sidecar：它自带 REST，不需要抓屏。
+transport:
+  type: http
+  base: "http://127.0.0.1:8787"
+  auth: {type: bearer, env: HERMES_TOKEN}
+  endpoints:
+    list:    {method: GET,  path: "/v1/sessions"}
+    history: {method: GET,  path: "/v1/sessions/{{sid}}/messages", query: {before: "{{before_seq}}", limit: "{{limit}}"}}
+    send:    {method: POST, path: "/v1/sessions/{{sid}}/messages", body: {text: "{{text}}"}}
+    stop:    {method: POST, path: "/v1/sessions/{{sid}}/interrupt"}
+    spawn:   {method: POST, path: "/v1/sessions", body: {cwd: "{{cwd}}", title: "{{title}}"}}
+  async:
+    transport: sse
+    path: "/v1/sessions/{{sid}}/events"
+
+parse:
+  # HTTP 源已结构化，仅做字段映射
+  map:
+    message: {seq: "id", role: "role", kind: "type", text: "content", ts: "created_at"}
+
+state:
+  busy:    {json: {field: "status", equals: "running"}}
+  idle:    {json: {field: "status", equals: "idle"}}
+  waiting: {json: {field: "status", equals: "awaiting_input"}}
+
+semantics:
+  input.text:      {write: "{{text}}"}
+  input.key:       {unsupported: true}
+  input.choice:    {write: "{{label}}"}
+  input.approve:   {write: "{{yes_no}}"}
+  input.interrupt: {stop: true}
+
+caps: [session.list, session.spawn, input.text, input.choice, input.approve, input.interrupt, output.stream]

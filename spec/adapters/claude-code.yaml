@@ -1,0 +1,42 @@
+adapter: claude-code@1
+agent: claude-code
+display: Claude Code
+match:
+  cmd: ["claude"]
+  version: ">=1.0 <3"
+  detect: {screen: "Claude Code|╭─+"}
+
+transport:
+  type: tmux
+  target: "cc-{{sid}}"
+  capture: {mode: screen, rows: 44, cols: 108, interval_ms: 500}
+  spawn:
+    exec: "tmux new-session -d -s cc-{{sid}} -x {{cols}} -y {{rows}} -c {{cwd}} 'claude'"
+
+state:
+  busy:    {regex: "esc to interrupt|Thinking|✻ .*\\("}
+  idle:    {regex: "^\\s*❯\\s*$|^\\s*>\\s*$"}
+  waiting: {regex: "Do you want to (proceed|allow)|\\[y/n\\]|\\d+\\.\\s+Yes"}
+
+parse:
+  prompt: {regex: "^\\s*❯\\s*$"}
+  choice:
+    regex: "^\\s*(\\d+)\\.\\s+(.+?)\\s*$"
+    group_index: 1
+    group_label: 2
+  code_block: {regex: "^\\s*```"}
+
+semantics:
+  input.text:      {write: "{{text}}", submit: "\r"}
+  input.key:       {keys: {"UP": "\u001b[A", "DOWN": "\u001b[B", "ENTER": "\r", "ESC": "\u001b", "TAB": "\t", "SHIFT_TAB": "\u001b[Z"}}
+  input.choice:    {write: "{{index}}", submit: "\r"}
+  input.approve:   {write: "{{yes_no}}", submit: "\r", "yes": "y", "no": "n"}
+  input.interrupt: {write: "\u0003"}
+  session.snapshot: {exec: "tmux capture-pane -p -t cc-{{sid}} -S -{{rows}}"}
+  session.spawn:   {exec: "tmux new-session -d -s cc-{{sid}} -x {{cols}} -y {{rows}} -c {{cwd}} 'claude'"}
+  session.list:    {exec: "tmux list-sessions -F '#{session_name}'"}
+
+guards:
+  confirm_regex: "(rm -rf|git push --force|DROP TABLE|sudo )"
+
+caps: [session.list, session.spawn, input.text, input.key, input.choice, input.approve, input.interrupt, output.screen, screen.snapshot, file.read]

@@ -1,0 +1,43 @@
+adapter: tmux@1
+agent: tmux
+display: Tmux Session
+match: {}          # 兜底通用 tmux 接管，靠 --adapter tmux@1 显式指定
+
+# 接管「已经存在」的 tmux 会话，而不是由 bridge 自己 spawn 一个。
+#
+# 关键约束（见 spec/SBP-0.1）：TmuxSource 的 target 取自 bridge 的 sid，
+# 所以命令行必须让 --sid 等于真实会话名：
+#     sbp-bridge up --sid main --adapter tmux@1 --server http://127.0.0.1:8787
+#
+# 这也是 sbp_supervise.py 的工作方式：枚举 `tmux ls`，每个会话一个 bridge。
+transport:
+  type: tmux
+  capture: {mode: screen, rows: 44, cols: 120, interval_ms: 500}
+
+state:
+  # 通用兜底：tmux 里跑什么都有可能，不做激进判定，交给具体 agent adapter。
+  busy:    {regex: "(?!)"}
+  idle:    {regex: ".*"}
+  waiting: {regex: "(?!)"}
+
+# 通用「编号选项」识别：兼容 box-drawing 边框 │ 与 › ● ▸ * 等选择标记。
+# 解析由 bridge 从屏幕底部向上扫（见 SBP-0.2），历史区里的旧编号不会误命中。
+parse:
+  choice:
+    regex: '^[│\s]*[›●◦•▸>*]?\s*(\d+)\.\s+(.+?)\s*$'
+    group_index: 1
+    group_label: 2
+
+semantics:
+  input.text:      {write: "{{text}}", submit: "\r"}
+  input.key:       {keys: {"UP": "\u001b[A", "DOWN": "\u001b[B", "LEFT": "\u001b[D", "RIGHT": "\u001b[C",
+                           "ENTER": "\r", "ESC": "\u001b", "TAB": "\t", "SHIFT_TAB": "\u001b[Z",
+                           "CTRL_C": "\u0003", "CTRL_D": "\u0004"}}
+  input.choice:    {write: "{{index}}", submit: "\r"}
+  input.approve:   {write: "{{yes_no}}", submit: "\r", "yes": "y", "no": "n"}
+  input.interrupt: {write: "\u0003"}
+  session.snapshot: {exec: "tmux capture-pane -p -t {{sid}} -S -{{rows}}"}
+  session.list:    {exec: "tmux list-sessions -F '#{session_name}'"}
+
+caps: [session.list, input.text, input.key, input.choice, input.approve, input.interrupt,
+       output.screen, screen.snapshot]

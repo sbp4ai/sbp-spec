@@ -1,0 +1,52 @@
+adapter: qwen-code@1
+agent: qwen-code
+display: Qwen Code
+match:
+  cmd: ["qwen", "qwen-code"]
+  detect: {screen: "Qwen Code|>_ Qwen"}
+
+# 接管已在 tmux 里跑着的 qwen code CLI（v0.21.0 实测）。
+# 与 claude-code@1 一样走 tmux 传输：只读、不 spawn，
+# 因此要求 --sid 等于真实 tmux 会话名。
+transport:
+  type: tmux
+  capture: {mode: screen, rows: 44, cols: 120, interval_ms: 500}
+
+# 下面的正则不是猜的：取自本机安装的
+# @qwen-code/qwen-code/locales/{en,zh}.js 里的真实文案，
+# 因此中英文界面都能命中。
+state:
+  # 运行中：等待确认 / 正在思考（真机 capture 见 Qwen Code v0.21.0 欢迎框）
+  busy: {regex: "Waiting for user confirmation|Esc to cancel|正在等待|⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏"}
+  # 等待用户批准/选择：三类权限询问 + 继续确认
+  waiting: {regex: "Do you want to (proceed|continue)|Apply this change|是否继续|是否应用此更改|\\[Y/n\\]"}
+  idle: {regex: ".*"}
+
+# Qwen Code 的选项列表形如：
+#     │  1. Yes, allow once
+#     │  2. Yes, allow always
+#     │  3. No (esc)
+# 选中项前缀是 ›（实测 provider 选择框用的就是 ›），也可能带 │ 边框。
+parse:
+  choice:
+    regex: '^[│\s]*[›●◦•▸>*]?\s*(\d+)\.\s+(.+?)\s*$'
+    group_index: 1
+    group_label: 2
+
+semantics:
+  input.text:      {write: "{{text}}", submit: "\r"}
+  input.key:       {keys: {"UP": "\u001b[A", "DOWN": "\u001b[B", "LEFT": "\u001b[D", "RIGHT": "\u001b[C",
+                           "ENTER": "\r", "ESC": "\u001b", "TAB": "\t", "SHIFT_TAB": "\u001b[Z",
+                           "CTRL_C": "\u0003", "CTRL_D": "\u0004"}}
+  input.choice:    {write: "{{index}}", submit: "\r"}
+  # 界面上 [Y/n] 与 · N/Esc to cancel 两种确认写法都支持
+  input.approve:   {write: "{{yes_no}}", submit: "\r", "yes": "y", "no": "n"}
+  input.interrupt: {write: "\u0003"}
+  session.snapshot: {exec: "tmux capture-pane -p -t {{sid}} -S -{{rows}}"}
+  session.list:    {exec: "tmux list-sessions -F '#{session_name}'"}
+
+guards:
+  confirm_regex: "(rm -rf|git push --force|DROP TABLE|sudo )"
+
+caps: [session.list, input.text, input.key, input.choice, input.approve, input.interrupt,
+       output.screen, screen.snapshot]

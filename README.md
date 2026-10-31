@@ -13,7 +13,7 @@ SBP is split into 6 independent repositories. This one is the "contract" that ev
 | [sbp-spec](https://github.com/sbp4ai/sbp-spec) | Protocol spec (this repo) | roles / frames / message tables / lazy-loading / security / evolution + agent adapter mapping |
 | [sbp-server](https://github.com/sbp4ai/sbp-server) | Public relay | auth, device-code binding, routing, JSONL persistence, reverse paging, seq allocation; pulls in sbp-sdk via submodule |
 | [sbp-sdk](https://github.com/sbp4ai/sbp-sdk) | Web client library | single-file `sbp-sdk.js`, served by sbp-server as a static file for the IM card |
-| [sbp-agent](https://github.com/sbp4ai/sbp-agent) | Local daemon | runs on the machine running tmux+claude: panel (tmux-claude panel) + bridge (PC-side bridge) + demo |
+| [sbp-agent](https://github.com/sbp4ai/sbp-agent) | Local daemon | runs on the machine running tmux+claude: panel (tmux-claude panel) + bridge (PC-side bridge) + demo · panel on PyPI: [`tmux-ai-coder-panel`](https://pypi.org/project/tmux-ai-coder-panel/) |
 | [sbp-minis](https://github.com/sbp4ai/sbp-minis) | WeChat mini-program | drive sessions from a phone (REST polling default, WS optional) |
 | [sbp-im-embed](https://github.com/sbp4ai/sbp-im-embed) | IM-embed skill | a Skill that lets an agent lazy-load an SBP web page inside an IM |
 
@@ -162,7 +162,7 @@ SBP 拆成 6 个独立仓库，本仓库是「协议契约」，其余都依赖�
 | [sbp-spec](https://github.com/sbp4ai/sbp-spec) | 协议规范（本仓库） | 角色/帧/消息表/懒加载/安全/演进 + agent adapter 映射 |
 | [sbp-server](https://github.com/sbp4ai/sbp-server) | 公网中继 | 鉴权、设备码绑定、路由、JSONL 持久化、倒序分页、seq 分配；以 submodule 引入 sbp-sdk |
 | [sbp-sdk](https://github.com/sbp4ai/sbp-sdk) | 网页客户端库 | 单文件 `sbp-sdk.js`，被 sbp-server 作为静态文件提供给 IM 卡片 |
-| [sbp-agent](https://github.com/sbp4ai/sbp-agent) | 本机守护 | 装在跑 tmux+claude 的机器上：panel(tmux-claude 面板)+bridge(PC 侧桥接)+demo |
+| [sbp-agent](https://github.com/sbp4ai/sbp-agent) | 本机守护 | 装在跑 tmux+claude 的机器上：panel(tmux-claude 面板)+bridge(PC 侧桥接)+demo · 面板已发布 PyPI：[`tmux-ai-coder-panel`](https://pypi.org/project/tmux-ai-coder-panel/) |
 | [sbp-minis](https://github.com/sbp4ai/sbp-minis) | 微信小程序 | 手机端驱动会话（REST 轮询默认，WS 可选） |
 | [sbp-im-embed](https://github.com/sbp4ai/sbp-im-embed) | IM 内嵌技能 | 让智能体在 IM 里懒加载 SBP 网页的 Skill |
 

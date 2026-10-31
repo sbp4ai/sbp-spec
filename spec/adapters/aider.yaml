@@ -1,0 +1,43 @@
+adapter: aider@1
+agent: aider
+display: Aider
+match:
+  cmd: ["aider"]
+  detect: {screen: "aider>|Aider"}
+
+# 接管已在 tmux 里跑着的 aider（不 spawn，因此 --sid 必须等于真实会话名）。
+# aider 是纯 pty 型：没有结构化接口，全靠屏读，选项/确认走 tmux 传输。
+transport:
+  type: tmux
+  capture: {mode: screen, rows: 44, cols: 120, interval_ms: 500}
+
+state:
+  # 正在改代码 / 跑命令 / 思考
+  busy:    {regex: "Applying|⠋|⠙|⠹|⠸|thinking|Sending|adding|editing"}
+  # 等待确认：aider 常用 Yes/No 或 [Y/n]
+  waiting: {regex: "Yes/No|yes/no|Continue\\?|Do you want|\\?\s*$|Press enter|\\[Y/n\\]|\\[y/N\\]"}
+  idle:    {regex: ".*"}
+
+parse:
+  # aider 的选项形如 ` 1. Yes` / ` ❯ 2. No`，兼容 box-drawing 边框与 › 选择标记
+  choice:
+    regex: '^[│\s]*[›●◦•▸>*]?\s*(\d+)\.\s+(.+?)\s*$'
+    group_index: 1
+    group_label: 2
+
+semantics:
+  input.text:      {write: "{{text}}", submit: "\r"}
+  input.key:       {keys: {"UP": "\u001b[A", "DOWN": "\u001b[B", "LEFT": "\u001b[D", "RIGHT": "\u001b[C",
+                           "ENTER": "\r", "ESC": "\u001b", "TAB": "\t", "SHIFT_TAB": "\u001b[Z",
+                           "CTRL_C": "\u0003", "CTRL_D": "\u0004"}}
+  input.choice:    {write: "{{index}}", submit: "\r"}
+  input.approve:   {write: "{{yes_no}}", submit: "\r", "yes": "y", "no": "n"}
+  input.interrupt: {write: "\u0003"}
+  session.snapshot: {exec: "tmux capture-pane -p -t {{sid}} -S -{{rows}}"}
+  session.list:    {exec: "tmux list-sessions -F '#{session_name}'"}
+
+guards:
+  confirm_regex: "(rm -rf|git push --force|DROP TABLE|sudo )"
+
+caps: [session.list, input.text, input.key, input.choice, input.approve, input.interrupt,
+       output.screen, screen.snapshot]

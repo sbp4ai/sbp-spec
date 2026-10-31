@@ -1,0 +1,43 @@
+adapter: opencode@1
+agent: opencode
+display: OpenCode
+match:
+  cmd: ["opencode"]
+  detect: {screen: "OpenCode|opencode>|opencode-cli"}
+
+# 接管已在 tmux 里跑着的 opencode（不 spawn，因此 --sid 必须等于真实会话名）。
+# 与 claude-code / qwen-code 一样走 tmux 传输：只读、不 spawn。
+transport:
+  type: tmux
+  capture: {mode: screen, rows: 44, cols: 120, interval_ms: 500}
+
+state:
+  # 运行中：等待确认 / 正在思考
+  busy:    {regex: "esc to interrupt|Thinking|⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏|running"}
+  # 等待用户批准 / 选择
+  waiting: {regex: "Do you want to (proceed|continue)|Apply this change|是否继续|是否应用|\\[Y/n\\]|\\[y/N\\]"}
+  idle:    {regex: ".*"}
+
+parse:
+  # opencode 的选项形如 "  1. Yes, allow once" / "  ❯ 2. No"
+  choice:
+    regex: '^[│\s]*[›●◦•▸>*]?\s*(\d+)\.\s+(.+?)\s*$'
+    group_index: 1
+    group_label: 2
+
+semantics:
+  input.text:      {write: "{{text}}", submit: "\r"}
+  input.key:       {keys: {"UP": "\u001b[A", "DOWN": "\u001b[B", "LEFT": "\u001b[D", "RIGHT": "\u001b[C",
+                           "ENTER": "\r", "ESC": "\u001b", "TAB": "\t", "SHIFT_TAB": "\u001b[Z",
+                           "CTRL_C": "\u0003", "CTRL_D": "\u0004"}}
+  input.choice:    {write: "{{index}}", submit: "\r"}
+  input.approve:   {write: "{{yes_no}}", submit: "\r", "yes": "y", "no": "n"}
+  input.interrupt: {write: "\u0003"}
+  session.snapshot: {exec: "tmux capture-pane -p -t {{sid}} -S -{{rows}}"}
+  session.list:    {exec: "tmux list-sessions -F '#{session_name}'"}
+
+guards:
+  confirm_regex: "(rm -rf|git push --force|DROP TABLE|sudo )"
+
+caps: [session.list, input.text, input.key, input.choice, input.approve, input.interrupt,
+       output.screen, screen.snapshot]

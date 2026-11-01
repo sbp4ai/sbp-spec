@@ -22,7 +22,7 @@ The three runtime pieces are also published as PyPI packages (repos under `sbp4a
 
 | Package | Repo | Role |
 |---|---|---|
-| [`sbp-client`](https://pypi.org/project/sbp-client/) | sbp-client | E2EE crypto core (PyNaCl) + `E2EELink`; shared by both ends |
+| [`sbp4ai-client`](https://pypi.org/project/sbp4ai-client/) | sbp-client | E2EE crypto core (PyNaCl) + `E2EELink`; shared by both ends |
 | [`sbp-dispatcher`](https://pypi.org/project/sbp-dispatcher/) | sbp-dispatcher | the relay — public-key directory + opaque-tag routing, holds **no** secret |
 | [`sbp-agents`](https://pypi.org/project/sbp-agents/) | sbp-agents | on-device daemon (tmux panel + bridge); generates and owns all private keys |
 
@@ -272,7 +272,7 @@ SBP 拆成 6 个独立仓库，本仓库是「协议契约」，其余都依赖�
 
 | 包 | 仓库 | 角色 |
 |---|---|---|
-| [`sbp-client`](https://pypi.org/project/sbp-client/) | sbp-client | E2EE 加密内核（PyNaCl）+ `E2EELink`，两端共用 |
+| [`sbp4ai-client`](https://pypi.org/project/sbp4ai-client/) | sbp-client | E2EE 加密内核（PyNaCl）+ `E2EELink`，两端共用 |
 | [`sbp-dispatcher`](https://pypi.org/project/sbp-dispatcher/) | sbp-dispatcher | 中继：公钥目录 + 按 tag 盲路由，**不持有任何密钥** |
 | [`sbp-agents`](https://pypi.org/project/sbp-agents/) | sbp-agents | 设备端守护（tmux 面板 + 桥接），生成并独占全部私钥 |
 

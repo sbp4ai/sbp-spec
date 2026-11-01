@@ -48,5 +48,23 @@ semantics:
 guards:
   confirm_regex: "(rm -rf|git push --force|DROP TABLE|sudo )"
 
+# ---------------------------------------------------------------- 落盘历史
+# qwen code 不是「纯终端」——它把对话写进了 jsonl，所以面板里是有历史可翻的。
+# 实测于 v0.26.0（2026-11-01，8.216.44.155）：
+#   文件     ~/.qwen/projects/<slug>/chats/<uuid>.jsonl
+#   slug     与 claude 同规则：cwd 里非字母数字全替换成 '-'（/tridu33 -> -tridu33）
+#   绑定 1   进程命令行带 --resume <uuid>
+#   绑定 2   chats/<uuid>.runtime.json 里 {pid, session_id}，用进程树 pid 反查
+#   兜底     cwd 对应目录下 mtime 最新的那个
+#   记录     type: user / assistant / system，正文在 message.parts（不是 content）
+# 没写这一段时，panel 只会把它当成一条实时屏幕（kind: term），历史一页都翻不到。
+history:
+  root: "~/.qwen/projects"
+  glob: "*/chats/*.jsonl"
+  cwd_dir: "{slug}/chats"
+  id_from_cmdline: '--resume\s+([0-9a-fA-F][0-9a-fA-F-]{7,})'
+  runtime: {glob: "*/chats/*.runtime.json", pid: pid, sid: session_id}
+  format: parts
+
 caps: [session.list, input.text, input.key, input.choice, input.approve, input.interrupt,
-       output.screen, screen.snapshot]
+       output.screen, screen.snapshot, session.history]

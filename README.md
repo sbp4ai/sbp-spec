@@ -18,7 +18,7 @@ SBP is split into 6 independent repositories. This one is the "contract" that ev
 | [sbp-console](https://github.com/sbp4ai/sbp-console) | Web console | one page for N servers, no build step; E2EE via libsodium |
 | [sbp-im-embed](https://github.com/sbp4ai/sbp-im-embed) | IM-embed skill | a Skill that lets an agent lazy-load an SBP web page inside an IM |
 
-The three runtime pieces are also published as PyPI packages (repos under `sbp4ai/`, all at `0.5.7`):
+The three runtime pieces are also published as PyPI packages (repos under `sbp4ai/`; `sbp4ai-agents` and `sbp4ai-dispatcher` at `0.5.8`, `sbp4ai-client` at `0.5.7`):
 
 | Package | Repo | Role |
 |---|---|---|
@@ -280,7 +280,7 @@ SBP 拆成 6 个独立仓库，本仓库是「协议契约」，其余都依赖�
 | [sbp-console](https://github.com/sbp4ai/sbp-console) | 网页控制台 | 一个页面看 N 台服务器，无构建步骤；E2EE 走 libsodium |
 | [sbp-im-embed](https://github.com/sbp4ai/sbp-im-embed) | IM 内嵌技能 | 让智能体在 IM 里懒加载 SBP 网页的 Skill |
 
-三个运行时部件另外以 PyPI 包发布（仓库同在 `sbp4ai/`，统一 `0.5.7`）：
+三个运行时部件另外以 PyPI 包发布（仓库同在 `sbp4ai/`；`sbp4ai-agents` 与 `sbp4ai-dispatcher` 为 `0.5.8`，`sbp4ai-client` 为 `0.5.7`）：
 
 | 包 | 仓库 | 角色 |
 |---|---|---|

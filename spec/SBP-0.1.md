@@ -215,6 +215,44 @@ session.history  req  {sid, dir:"back", before_seq:812, limit:20}
 
 `session.attach` 成功后，服务端从 `from_seq` 开始推 `output.delta`。客户端每收到 16 条或 200ms 发一次 `ack{sid,seq}`，服务端据此裁剪重放缓冲（保留最近 500 条或 5 分钟）。
 
+### 6.5 会话 id 的命名空间（`sid`）
+
+`sid` 是设备侧的不透明字符串，客户端**不得解析其内部结构**，但下列前缀属于协议约定，
+用于让不同形态的会话在同一份索引里共存：
+
+| sid 形态 | 含义 | 有历史 | 可输入 |
+|---|---|---|---|
+| `<uuid>` / 设备自定义 | agent 落盘会话（claude 的 jsonl、qwen 的 chat 记录等） | 是 | 是（在 tmux 里时） |
+| `term:<tmux>`、`term:<tmux>#<pane>` | 终端型 agent（dsh / codex / aider…），只有实时屏幕 | 否（可能绑定一个历史文件） | 是 |
+| `shell:<tmux>`、`shell:<tmux>#<pane>` | **该 tmux 里一个 agent 都没在跑**：空终端 | 否 | 是 |
+
+`shell:` 是 v0.5 新增的兜底形态，解决「机器上没起 agent，手机端就整台机器消失」的问题：
+
+- 设备侧只在「这个 tmux 有 pane、且进程树里没有任何被识别的 agent」时下发 `shell:` 项，
+  每个 pane 一条，`kind:"shell"`，`status:"idle"`。
+- 客户端对 `shell:` 会话只渲染实时屏幕 + 输入框，**不显示历史面板**（没有历史可翻）。
+- 用户在空终端里 `session.input` 敲 `claude` / `codex` / `dsh`，agent 进程起来之后设备侧
+  下一次索引里该 tmux 会换成 `<uuid>` 或 `term:` 项；客户端可以据此自动跟随过去
+  （实现建议：同一 tmux 内出现非 shell 的 active 项时切到它）。
+- 不认识 `shell:` 的老客户端把它当 `term:` 渲染即可正常工作（都有屏幕与输入），
+  所以这是一个向后兼容的纯增量。
+
+### 6.6 `active` 与「只显示活跃会话」
+
+索引项除 `status` 外还可以带布尔字段 `active`：
+
+```json
+{"sid":"...","kind":"term","active":true,"status":"running"}
+```
+
+- `active:true` = **此刻**这个会话正被 agent 使用（claude 的 jsonl 被进程打开、或 pane 进程树里
+  有该 agent 进程）。`active:false` 只是历史痕迹，不代表还在跑。
+- 参考实现（`sbp4ai-agents` 的 panel/bridge、`sbp4ai-dispatcher` 的聚合）对每个 tmux 组
+  **只把 active 的项下发给客户端**，历史会话不进 `session.list`：手机上一屏只该有还在跑的东西。
+- `shell:` 项恒为 `active:true`（它是该 tmux 里唯一可点的东西），否则会被「只显示活跃」筛掉。
+- 客户端必须兼容只报 `status`（`running`/`idle`）的老设备：`active` 缺省时按
+  `status === "running"` 判定。
+
 ---
 
 ## 7. 能力协商
@@ -431,6 +469,8 @@ client                server                 bridge(agent)
 - 次版本只允许「加字段 / 加事件 / 加 cap」，不允许改语义。
 - 每个 evt 都可能有未知 `name`，客户端必须忽略而不是报错 —— 这是全套协议能平滑升级的唯一保障。
 - 预留：`v0.2` 加二进制帧与断线补洞 `E_GAP` 语义；`v0.3` 加 E2E 与企业审计导出。
+- v0.5（实现演进，不改帧格式）：新增 `shell:` 会话形态（§6.5）与 `active` 字段（§6.6）。
+  两者都是纯增量：老客户端把 `shell:` 当 `term:` 显示、`active` 缺省退回 `status`，行为不变。
 
 ---
 
